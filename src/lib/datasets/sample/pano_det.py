@@ -187,4 +187,3 @@ class PanoDataset(data.Dataset):
         }
         
         return ret
-        
