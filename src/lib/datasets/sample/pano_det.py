@@ -93,6 +93,7 @@ class PanoDataset(data.Dataset):
             annos.append({
                 'tooth_class': tooth_class,
                 'tooth_size': (tooth_height, tooth_width),
+                'bbox_size': ((y_max - y_min) / H, (x_max - x_min) / (H * 1.5)),
                 'extreme_points': [[x_center, y_center],
                                    [x_crown, y_crown],
                                    [x_root, y_root]]
@@ -160,10 +161,10 @@ class PanoDataset(data.Dataset):
             cls_id = anno['tooth_class']
             pts = np.array(anno['extreme_points'], dtype=np.float32) * [output_w, output_h]
             pt_int = pts.astype(np.int32)
+            bbox_h, bbox_w = anno['bbox_size']
             tooth_height, tooth_width = anno['tooth_size']
-            tooth_height = math.ceil(tooth_height * output_h)
-            tooth_width = math.ceil(tooth_width * output_w)
-            radius = gaussian_radius((tooth_height, tooth_width))
+            radius = gaussian_radius((math.ceil(tooth_height * output_h),
+                                      math.ceil(tooth_width * output_w)))
             radius = max(0, int(radius))
 
             draw_gaussian(hm_center[cls_id], pt_int[0], radius)
@@ -181,7 +182,8 @@ class PanoDataset(data.Dataset):
             'input': inp,
             'hm_center': hm_center, 'hm_crown': hm_crown, 'hm_root': hm_root,
             'reg_mask': reg_mask,
-            'reg_w': anno['tooth_size'][1],
+            'bbox_h': bbox_h, 'bbox_w': bbox_w,
+            'reg_h': tooth_height, 'reg_w': tooth_width,            
             'reg_center': reg_center, 'reg_crown': reg_crown, 'reg_root': reg_root,
             'ind_center': ind_center, 'ind_crown': ind_crown, 'ind_root': ind_root
         }
