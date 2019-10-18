@@ -13,17 +13,16 @@ from utils.image import gaussian_radius, draw_umich_gaussian, draw_msra_gaussian
 import math
 
 class PanoDataset(data.Dataset):
+
     def pano_center_crop_and_resize(self, img):
         h, w = img.shape
         new_w = int(h * 1.5)
         margin = (w - new_w) // 2
         img = img[:, margin: margin + new_w]
         img = cv2.resize(img, dsize=self.default_resolution)
-
         img = np.float64(img) / 255
         img = (img - self.mean) / self.std
-        return img    
-
+        return img
 
     def get_tooth_class(self, tooth_num):
         if tooth_num % 10 < 3:
@@ -31,10 +30,8 @@ class PanoDataset(data.Dataset):
         if tooth_num % 10 == 3:
             return 2 # canine
         if tooth_num % 10 < 6:
-            return 3 # premolar            
-
+            return 3 # premolar
         return 4 # molar
-
 
     def change_coords(self, x, y, H, W):
         new_w = int(H * 1.5)
@@ -42,9 +39,7 @@ class PanoDataset(data.Dataset):
         x -= margin
         x /= new_w
         y /= H
-
         return (x, y)
-
 
     def process_anno(self, anno_file_name, H, W):        
         w = W // 2
@@ -54,8 +49,7 @@ class PanoDataset(data.Dataset):
 
         for idx, row in df.iterrows():
             tooth_num = int(row[0])
-            tooth_class = self.get_tooth_class(tooth_num)            
-            
+            tooth_class = self.get_tooth_class(tooth_num) 
             x_max = y_max = -1
             x_min = y_min = math.inf
             j = 3
@@ -92,15 +86,14 @@ class PanoDataset(data.Dataset):
 
             annos.append({
                 'tooth_class': tooth_class,
-                'tooth_size': (tooth_height, tooth_width),
-                'bbox_size': ((y_max - y_min) / H, (x_max - x_min) / (H * 1.5)),
+                'tooth_size': (tooth_width, tooth_height),
+                'bbox_size': ((x_max - x_min) / (H * 1.5), (y_max - y_min) / H),
                 'extreme_points': [[x_center, y_center],
                                    [x_crown, y_crown],
                                    [x_root, y_root]]
             })
 
         return annos
-
 
     def __getitem__(self, index):
         img_file_name = self.img_file_names[index]
@@ -148,6 +141,9 @@ class PanoDataset(data.Dataset):
         ind_center = np.zeros((self.max_objs), dtype=np.int64)
         ind_crown = np.zeros((self.max_objs), dtype=np.int64)
         ind_root = np.zeros((self.max_objs), dtype=np.int64)
+        bbox_wh = np.zeros((self.max_objs, 2), dtype=np.float32)
+        tooth_wh = np.zeros((self.max_objs, 2), dtype=np.float32)
+
         reg_mask = np.zeros((self.max_objs), dtype=np.uint8)
 
         anno_file_name = img_file_name[:-3] + 'txt'
@@ -161,10 +157,11 @@ class PanoDataset(data.Dataset):
             cls_id = anno['tooth_class']
             pts = np.array(anno['extreme_points'], dtype=np.float32) * [output_w, output_h]
             pt_int = pts.astype(np.int32)
-            bbox_h, bbox_w = anno['bbox_size']
-            tooth_height, tooth_width = anno['tooth_size']
-            radius = gaussian_radius((math.ceil(tooth_height * output_h),
-                                      math.ceil(tooth_width * output_w)))
+            bbox_wh[k] = anno['bbox_size']
+            tooth_w, tooth_h = anno['tooth_size']
+            tooth_wh[k] = tooth_w, tooth_h
+            radius = gaussian_radius((math.ceil(tooth_h * output_h),
+                                      math.ceil(tooth_w * output_w)))
             radius = max(0, int(radius))
 
             draw_gaussian(hm_center[cls_id], pt_int[0], radius)
@@ -175,15 +172,14 @@ class PanoDataset(data.Dataset):
             reg_root[k] = pts[2] - pt_int[2]
             ind_center[k] = pt_int[0, 1] * output_w + pt_int[0, 0]
             ind_crown[k] = pt_int[1, 1] * output_w + pt_int[1, 0]
-            ind_root[k] = pt_int[2, 1] * output_w + pt_int[2, 0]            
+            ind_root[k] = pt_int[2, 1] * output_w + pt_int[2, 0]
             reg_mask[k] = 1
 
         ret = {
             'input': inp,
             'hm_center': hm_center, 'hm_crown': hm_crown, 'hm_root': hm_root,
             'reg_mask': reg_mask,
-            'bbox_h': bbox_h, 'bbox_w': bbox_w,
-            'reg_h': tooth_height, 'reg_w': tooth_width,            
+            'bbox_wh': bbox_wh, 'tooth_wh': tooth_wh,
             'reg_center': reg_center, 'reg_crown': reg_crown, 'reg_root': reg_root,
             'ind_center': ind_center, 'ind_crown': ind_crown, 'ind_root': ind_root
         }

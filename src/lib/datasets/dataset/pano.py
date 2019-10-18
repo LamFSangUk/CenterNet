@@ -7,7 +7,9 @@ import json
 import os
 import torch.utils.data as data
 
+
 class PANO(data.Dataset):
+    
     def __init__(self, opt, split):
         # needed: self.images, self.img_dir, self.split, self.mean/std, self.max_obj, self.anno
         super(PANO, self).__init__()
