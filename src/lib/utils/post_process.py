@@ -112,3 +112,19 @@ def multi_pose_post_process(dets, c, s, h, w):
        pts.reshape(-1, 34)], axis=1).astype(np.float32).tolist()
     ret.append({np.ones(1, dtype=np.int32)[0]: top_preds})
   return ret
+
+
+def pano_post_process(dets, num_classes):
+  # dets: batch x max_dets x dim
+  ret = []
+  dets[:, :, :4] *= 4
+  for i in range(dets.shape[0]):
+    top_preds = {}
+    classes = dets[i, :, -1]
+    for j in range(num_classes):
+      inds = (classes == j)
+      top_preds[j] = np.concatenate([
+        dets[i, inds, :4].astype(np.float32),
+        dets[i, inds, 4:5].astype(np.float32)], axis=1).tolist()
+    ret.append(top_preds)
+  return ret

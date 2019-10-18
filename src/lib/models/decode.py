@@ -569,3 +569,28 @@ def multi_pose_decode(
   detections = torch.cat([bboxes, scores, kps, clses], dim=2)
     
   return detections
+
+
+def pano_decode(heat_center, bbox_wh, reg_center, K=100):
+    batch_size, _, h, w = heat_center.size()[0]
+    heat_center = _nms(heat_center)
+    scores_center, inds_center, clses_center, ys_center, xs_center = _topk(heat_center, K=K)
+
+    reg_center = _tranpose_and_gather_feat(reg_center, inds_center)
+    reg_center = reg_center.view(batch_size, K, 2)
+    xs_center = xs_center.view(batch_size, K, 1) + reg_center[:, :, 0:1]
+    ys_center = ys_center.view(batch_size, K, 1) + reg_center[:, :, 1:2]
+
+    bbox_wh = _tranpose_and_gather_feat(bbox_wh, inds_center)
+    bbox_wh = bbox_wh.view(batch_size, K, 2)
+
+    clses_center = clses_center.view(batch_size, K, 1).float()
+    scores_center = scores_center.view(batch_size, K, 1)
+
+    bboxes = torch.cat([xs_center - bbox_wh[..., 0:1] * w / 2,
+                        ys_center - bbox_wh[..., 1:2] * h / 2,
+                        xs_center + bbox_wh[..., 0:1] * w / 2,
+                        ys_center + bbox_wh[..., 1:2] * h / 2], dim=2)
+
+    detections = torch.cat([bboxes, scores_center, clses_center], dim=2)
+    return detections
