@@ -19,7 +19,7 @@ class PanoDataset(data.Dataset):
         new_w = int(h * 1.5)
         margin = (w - new_w) // 2
         img = img[:, margin: margin + new_w]
-        img = cv2.resize(img, dsize=self.default_resolution)
+        img = cv2.resize(img, dsize=(self.default_resolution[1], self.default_resolution[0]))
         img = np.float64(img) / 255
         img = (img - self.mean) / self.std
         return img
@@ -126,9 +126,9 @@ class PanoDataset(data.Dataset):
                                                  (self.opt.input_res, self.opt.input_res),
                                                  flags=cv2.INTER_LINEAR)
         '''
-
         inp = self.pano_center_crop_and_resize(img)
         inp = np.expand_dims(inp, 0)
+        inp = np.repeat(inp, 3, axis=0)
         output_h = self.opt.output_h
         output_w = self.opt.output_w
 

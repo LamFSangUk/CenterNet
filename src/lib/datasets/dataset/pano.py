@@ -9,19 +9,23 @@ import torch.utils.data as data
 
 
 class PANO(data.Dataset):
-    
+    default_resolution = (256, 384)
+    num_classes = 5
+    mean = 0.40984170839779815
+    std = 0.20721967617834552
+
     def __init__(self, opt, split):
         # needed: self.images, self.img_dir, self.split, self.mean/std, self.max_obj, self.anno
         super(PANO, self).__init__()
-        self.num_classes = 5
-        self.default_resolution = (300, 450)
+        #self.num_classes = 5
+        #self.default_resolution = (300, 450)
         self.split = split # split = test or train?
         self.opt = opt
         self.data_dir = os.path.join(opt.data_dir, split)
         self.img_file_names = []
 
         for f in os.listdir(self.data_dir):
-            if f[-3:] != 'txt':
+            if f[-3:] != 'txt' and 'thum' not in f:
                 self.img_file_names.append(f)
         
         self.num_samples = len(self.img_file_names)
@@ -35,9 +39,11 @@ class PANO(data.Dataset):
         ]       
         
         # calculated manually
-        self.mean = 0.40984170839779815
-        self.std = 0.20721967617834552
+        #self.mean = 0.40984170839779815
+        #self.std = 0.20721967617834552
 
+    def __len__(self):
+        return self.num_samples
 
     '''
     def _to_float(self, x):
@@ -67,8 +73,6 @@ class PANO(data.Dataset):
                     detections.append(detection)
         return detections
 
-    def __len__(self):
-        return self.num_samples
 
     def save_results(self, results, save_dir):
         json.dump(self.convert_eval_format(results), 
