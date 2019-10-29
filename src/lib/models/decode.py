@@ -572,7 +572,7 @@ def multi_pose_decode(
 
 
 def pano_decode(heat_center, bbox_wh, reg_center, K=100):
-    batch_size, _, h, w = heat_center.size()[0]
+    batch_size, _, h, w = heat_center.size()
     heat_center = _nms(heat_center)
     scores_center, inds_center, clses_center, ys_center, xs_center = _topk(heat_center, K=K)
 

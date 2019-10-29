@@ -9,10 +9,10 @@ import torch.utils.data as data
 
 
 class PANO(data.Dataset):
-    default_resolution = (256, 384)
-    num_classes = 5
-    mean = 0.40984170839779815
-    std = 0.20721967617834552
+    default_resolution = (512, 768)
+    num_classes = 2
+    mean = 0.4046034371726307
+    std = 0.20749317242254753
 
     def __init__(self, opt, split):
         # needed: self.images, self.img_dir, self.split, self.mean/std, self.max_obj, self.anno
@@ -32,12 +32,13 @@ class PANO(data.Dataset):
         self.max_objs = 32
         self.class_name = [
             '__background__',
-            'incisor',  # front tooth (_1, _2)
-            'canine',   # sharp tooth (_3)
-            'premolar', # small molar (_4, _5)
-            'molar'     # big molar   (_6, _7, _8)        
-        ]       
-        
+            'tooth'
+            #'incisor',  # front tooth (_1, _2)
+            #'canine',   # sharp tooth (_3)
+            #'premolar', # small molar (_4, _5)
+            #'molar'     # big molar   (_6, _7, _8)
+        ]
+
         # calculated manually
         #self.mean = 0.40984170839779815
         #self.std = 0.20721967617834552

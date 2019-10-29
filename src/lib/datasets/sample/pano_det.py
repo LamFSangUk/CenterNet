@@ -14,6 +14,11 @@ import math
 
 class PanoDataset(data.Dataset):
 
+    def is_true(self, s):
+        if 'T' in s or 't' in s:
+            return True
+        return False
+
     def pano_center_crop_and_resize(self, img):
         h, w = img.shape
         new_w = int(h * 1.5)
@@ -48,9 +53,13 @@ class PanoDataset(data.Dataset):
         df = pd.read_csv(os.path.join(self.data_dir, anno_file_name), header=None)        
 
         for idx, row in df.iterrows():
+            if not self.is_true(row[1]):
+                continue
+
             tooth_num = int(row[0])
-            tooth_class = self.get_tooth_class(tooth_num) 
-            x_max = y_max = -1
+            #tooth_class = self.get_tooth_class(tooth_num)
+            tooth_class = 1
+            x_max = y_max = -math.inf
             x_min = y_min = math.inf
             j = 3
 
@@ -177,6 +186,7 @@ class PanoDataset(data.Dataset):
 
         ret = {
             'input': inp,
+            'img_id': img_file_name[:-4], 'original_wh': (W, H),
             'hm_center': hm_center, 'hm_crown': hm_crown, 'hm_root': hm_root,
             'reg_mask': reg_mask,
             'bbox_wh': bbox_wh, 'tooth_wh': tooth_wh,
