@@ -46,19 +46,21 @@ class PanoDataset(data.Dataset):
         y /= H
         return (x, y)
 
-    def process_anno(self, anno_file_name, H, W):        
+    def process_anno(self, anno_file_name, H, W):
         w = W // 2
         h = H // 2
         annos = []
-        df = pd.read_csv(os.path.join(self.data_dir, anno_file_name), header=None)        
+        df = pd.read_csv(os.path.join(self.data_dir, anno_file_name), header=None)
 
         for idx, row in df.iterrows():
             if not self.is_true(row[1]):
                 continue
 
             tooth_num = int(row[0])
-            #tooth_class = self.get_tooth_class(tooth_num)
-            tooth_class = 1
+            tooth_loc = tooth_num // 10
+            tooth_class = tooth_num % 10
+            tooth_class = (tooth_loc - 1) * 8 + tooth_class
+
             x_max = y_max = -math.inf
             x_min = y_min = math.inf
             j = 3
@@ -83,21 +85,31 @@ class PanoDataset(data.Dataset):
             y_crown = h + (int(row[4]) + int(row[18])) // 2
             x_root = w + (int(row[9]) + int(row[11])) // 2
             y_root = h + (int(row[10]) + int(row[12])) // 2
+            x_alveolar = w + int(row[27])
+            y_alveolar = h + int(row[28])
 
             tooth_width = (int(row[5]) - int(row[15])) ** 2 + (int(row[6]) - int(row[16])) ** 2
             tooth_width = math.sqrt(tooth_width) / (H * 1.5)
             tooth_height = (x_crown - x_root) ** 2 + (y_crown - y_root) ** 2
             tooth_height = math.sqrt(tooth_height) / H
 
+            w1 = (x_alveolar - x_min) / (H * 1.5)
+            w2 = (x_max - x_alveolar) / (H * 1.5)
+            h1 = (y_alveolar - y_min) / H
+            h2 = (y_max - y_alveolar) / H
+
             x_center, y_center = self.change_coords(x_center, y_center, H, W)
             x_crown, y_crown = self.change_coords(x_crown, y_crown, H, W)
             x_root, y_root = self.change_coords(x_root, y_root, H, W)
+            x_alveolar, y_alveolar = self.change_coords(x_alveolar, y_alveolar, H, W)
 
             annos.append({
                 'tooth_class': tooth_class,
+                'tooth_loc': tooth_loc,
                 'tooth_size': (tooth_width, tooth_height),
-                'bbox_size': ((x_max - x_min) / (H * 1.5), (y_max - y_min) / H),
-                'extreme_points': [[x_center, y_center],
+                'bbox_w': (w1, w2), 'bbox_h': (h1, h2),
+                'extreme_points': [
+                                   [x_alveolar, y_alveolar],
                                    [x_crown, y_crown],
                                    [x_root, y_root]]
             })
@@ -142,15 +154,11 @@ class PanoDataset(data.Dataset):
         output_w = self.opt.output_w
 
         hm_center = np.zeros((self.num_classes, output_h, output_w), dtype=np.float32)
-        hm_crown = np.zeros((self.num_classes, output_h, output_w), dtype=np.float32)
-        hm_root = np.zeros((self.num_classes, output_h, output_w), dtype=np.float32)
         reg_center = np.zeros((self.max_objs, 2), dtype=np.float32)
         reg_crown = np.zeros((self.max_objs, 2), dtype=np.float32)
-        reg_root = np.zeros((self.max_objs, 2), dtype=np.float32)
         ind_center = np.zeros((self.max_objs), dtype=np.int64)
-        ind_crown = np.zeros((self.max_objs), dtype=np.int64)
-        ind_root = np.zeros((self.max_objs), dtype=np.int64)
-        bbox_wh = np.zeros((self.max_objs, 2), dtype=np.float32)
+        bbox_h = np.zeros((self.max_objs, 2), dtype=np.float32)
+        bbox_w = np.zeros((self.max_objs, 2), dtype=np.float32)
         tooth_wh = np.zeros((self.max_objs, 2), dtype=np.float32)
 
         reg_mask = np.zeros((self.max_objs), dtype=np.uint8)
@@ -164,9 +172,9 @@ class PanoDataset(data.Dataset):
         for k in range(num_objs):
             anno = annos[k]
             cls_id = anno['tooth_class']
+            tooth_loc = anno['tooth_loc']
             pts = np.array(anno['extreme_points'], dtype=np.float32) * [output_w, output_h]
             pt_int = pts.astype(np.int32)
-            bbox_wh[k] = anno['bbox_size']
             tooth_w, tooth_h = anno['tooth_size']
             tooth_wh[k] = tooth_w, tooth_h
             radius = gaussian_radius((math.ceil(tooth_h * output_h),
@@ -174,24 +182,21 @@ class PanoDataset(data.Dataset):
             radius = max(0, int(radius))
 
             draw_gaussian(hm_center[cls_id], pt_int[0], radius)
-            draw_gaussian(hm_crown[cls_id], pt_int[1], radius)
-            draw_gaussian(hm_root[cls_id], pt_int[2], radius)
+            draw_gaussian(hm_center[0], pt_int[0], radius)
+            #draw_gaussian(hm_center[tooth_loc + 8], pt_int[0], radius)
             reg_center[k] = pts[0] - pt_int[0]
-            reg_crown[k] = pts[1] - pt_int[1]
-            reg_root[k] = pts[2] - pt_int[2]
             ind_center[k] = pt_int[0, 1] * output_w + pt_int[0, 0]
-            ind_crown[k] = pt_int[1, 1] * output_w + pt_int[1, 0]
-            ind_root[k] = pt_int[2, 1] * output_w + pt_int[2, 0]
             reg_mask[k] = 1
+            reg_crown[k] = (pts[1] - pts[0]) / [output_w, output_h]
 
         ret = {
             'input': inp,
             'img_id': img_file_name[:-4], 'original_wh': (W, H),
-            'hm_center': hm_center, 'hm_crown': hm_crown, 'hm_root': hm_root,
+            'hm_center': hm_center,
             'reg_mask': reg_mask,
-            'bbox_wh': bbox_wh, 'tooth_wh': tooth_wh,
-            'reg_center': reg_center, 'reg_crown': reg_crown, 'reg_root': reg_root,
-            'ind_center': ind_center, 'ind_crown': ind_crown, 'ind_root': ind_root
+            'tooth_wh': tooth_wh,
+            'reg_center': reg_center, 'ind_center': ind_center,
+            'reg_crown': reg_crown
         }
-        
+
         return ret

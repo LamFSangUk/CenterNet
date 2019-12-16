@@ -10,7 +10,8 @@ import torch.utils.data as data
 
 class PANO(data.Dataset):
     default_resolution = (512, 768)
-    num_classes = 2
+    #num_classes = 1 + 8 + 4
+    num_classes = 1 + 32
     mean = 0.4046034371726307
     std = 0.20749317242254753
 
@@ -27,16 +28,17 @@ class PANO(data.Dataset):
         for f in os.listdir(self.data_dir):
             if f[-3:] != 'txt' and 'thum' not in f:
                 self.img_file_names.append(f)
-        
+
         self.num_samples = len(self.img_file_names)
         self.max_objs = 32
         self.class_name = [
-            '__background__',
-            'tooth'
-            #'incisor',  # front tooth (_1, _2)
-            #'canine',   # sharp tooth (_3)
-            #'premolar', # small molar (_4, _5)
-            #'molar'     # big molar   (_6, _7, _8)
+            #'tooth',
+            #'1', '2', '3', '4', '5', '6', '7', '8', '10', '20', '30', '40'
+            'tooth',
+            '11', '12', '13', '14', '15', '16', '17', '18',
+            '21', '22', '23', '24', '25', '26', '27', '28',
+            '31', '32', '33', '34', '35', '36', '37', '38',
+            '41', '42', '43', '44', '45', '46', '47', '48'
         ]
 
         # calculated manually
@@ -49,7 +51,7 @@ class PANO(data.Dataset):
     '''
     def _to_float(self, x):
         return float("{:.2f}".format(x))
-    
+
     def convert_eval_format(self, all_bboxes):
         # import pdb; pdb.set_trace()
         detections = []
@@ -76,9 +78,9 @@ class PANO(data.Dataset):
 
 
     def save_results(self, results, save_dir):
-        json.dump(self.convert_eval_format(results), 
+        json.dump(self.convert_eval_format(results),
                                 open('{}/results.json'.format(save_dir), 'w'))
-    
+
     def run_eval(self, results, save_dir):
         # result_json = os.path.join(save_dir, "results.json")
         # detections  = self.convert_eval_format(results)

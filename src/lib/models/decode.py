@@ -18,33 +18,33 @@ def _left_aggregate(heat):
     '''
         heat: batchsize x channels x h x w
     '''
-    shape = heat.shape 
+    shape = heat.shape
     heat = heat.reshape(-1, heat.shape[3])
     heat = heat.transpose(1, 0).contiguous()
     ret = heat.clone()
     for i in range(1, heat.shape[0]):
         inds = (heat[i] >= heat[i - 1])
         ret[i] += ret[i - 1] * inds.float()
-    return (ret - heat).transpose(1, 0).reshape(shape) 
+    return (ret - heat).transpose(1, 0).reshape(shape)
 
 def _right_aggregate(heat):
     '''
         heat: batchsize x channels x h x w
     '''
-    shape = heat.shape 
+    shape = heat.shape
     heat = heat.reshape(-1, heat.shape[3])
     heat = heat.transpose(1, 0).contiguous()
     ret = heat.clone()
     for i in range(heat.shape[0] - 2, -1, -1):
         inds = (heat[i] >= heat[i +1])
         ret[i] += ret[i + 1] * inds.float()
-    return (ret - heat).transpose(1, 0).reshape(shape) 
+    return (ret - heat).transpose(1, 0).reshape(shape)
 
 def _top_aggregate(heat):
     '''
         heat: batchsize x channels x h x w
     '''
-    heat = heat.transpose(3, 2) 
+    heat = heat.transpose(3, 2)
     shape = heat.shape
     heat = heat.reshape(-1, heat.shape[3])
     heat = heat.transpose(1, 0).contiguous()
@@ -58,7 +58,7 @@ def _bottom_aggregate(heat):
     '''
         heat: batchsize x channels x h x w
     '''
-    heat = heat.transpose(3, 2) 
+    heat = heat.transpose(3, 2)
     shape = heat.shape
     heat = heat.reshape(-1, heat.shape[3])
     heat = heat.transpose(1, 0).contiguous()
@@ -91,7 +91,7 @@ def _topk(scores, K=40):
 '''
 def _topk_channel(scores, K=40):
       batch, cat, height, width = scores.size()
-      
+
       topk_scores, topk_inds = torch.topk(scores.view(batch, cat, -1), K)
 
       topk_inds = topk_inds % (height * width)
@@ -102,13 +102,14 @@ def _topk_channel(scores, K=40):
 
 def _topk(scores, K=40):
     batch, cat, height, width = scores.size()
-      
+
     topk_scores, topk_inds = torch.topk(scores.view(batch, cat, -1), K)
 
     topk_inds = topk_inds % (height * width)
     topk_ys   = (topk_inds / width).int().float()
     topk_xs   = (topk_inds % width).int().float()
-      
+
+    # TODO: change this part to get topk from each cat
     topk_score, topk_ind = torch.topk(topk_scores.view(batch, -1), K)
     topk_clses = (topk_ind / K).int()
     topk_inds = _gather_feat(
@@ -120,8 +121,8 @@ def _topk(scores, K=40):
 
 
 def agnex_ct_decode(
-    t_heat, l_heat, b_heat, r_heat, ct_heat, 
-    t_regr=None, l_regr=None, b_regr=None, r_regr=None, 
+    t_heat, l_heat, b_heat, r_heat, ct_heat,
+    t_regr=None, l_regr=None, b_regr=None, r_regr=None,
     K=40, scores_thresh=0.1, center_thresh=0.1, aggr_weight=0.0, num_dets=1000
 ):
     batch, cat, height, width = t_heat.size()
@@ -133,19 +134,19 @@ def agnex_ct_decode(
     r_heat  = torch.sigmoid(r_heat)
     ct_heat = torch.sigmoid(ct_heat)
     '''
-    if aggr_weight > 0: 
+    if aggr_weight > 0:
       t_heat = _h_aggregate(t_heat, aggr_weight=aggr_weight)
       l_heat = _v_aggregate(l_heat, aggr_weight=aggr_weight)
       b_heat = _h_aggregate(b_heat, aggr_weight=aggr_weight)
       r_heat = _v_aggregate(r_heat, aggr_weight=aggr_weight)
-      
+
     # perform nms on heatmaps
     t_heat = _nms(t_heat)
     l_heat = _nms(l_heat)
     b_heat = _nms(b_heat)
     r_heat = _nms(r_heat)
-      
-      
+
+
     t_heat[t_heat > 1] = 1
     l_heat[l_heat > 1] = 1
     b_heat[b_heat > 1] = 1
@@ -155,9 +156,9 @@ def agnex_ct_decode(
     l_scores, l_inds, _, l_ys, l_xs = _topk(l_heat, K=K)
     b_scores, b_inds, _, b_ys, b_xs = _topk(b_heat, K=K)
     r_scores, r_inds, _, r_ys, r_xs = _topk(r_heat, K=K)
-      
+
     ct_heat_agn, ct_clses = torch.max(ct_heat, dim=1, keepdim=True)
-      
+
     # import pdb; pdb.set_trace()
 
     t_ys = t_ys.view(batch, K, 1, 1, 1).expand(batch, K, K, K, K)
@@ -239,7 +240,7 @@ def agnex_ct_decode(
         b_ys = b_ys + 0.5
         r_xs = r_xs + 0.5
         r_ys = r_ys + 0.5
-      
+
     bboxes = torch.stack((l_xs, t_ys, r_xs, b_ys), dim=5)
     bboxes = bboxes.view(batch, -1, 4)
     bboxes = _gather_feat(bboxes, inds)
@@ -265,14 +266,14 @@ def agnex_ct_decode(
     r_ys = _gather_feat(r_ys, inds).float()
 
 
-    detections = torch.cat([bboxes, scores, t_xs, t_ys, l_xs, l_ys, 
+    detections = torch.cat([bboxes, scores, t_xs, t_ys, l_xs, l_ys,
                             b_xs, b_ys, r_xs, r_ys, clses], dim=2)
 
     return detections
 
 def exct_decode(
-    t_heat, l_heat, b_heat, r_heat, ct_heat, 
-    t_regr=None, l_regr=None, b_regr=None, r_regr=None, 
+    t_heat, l_heat, b_heat, r_heat, ct_heat,
+    t_regr=None, l_regr=None, b_regr=None, r_regr=None,
     K=40, scores_thresh=0.1, center_thresh=0.1, aggr_weight=0.0, num_dets=1000
 ):
     batch, cat, height, width = t_heat.size()
@@ -284,18 +285,18 @@ def exct_decode(
     ct_heat = torch.sigmoid(ct_heat)
     '''
 
-    if aggr_weight > 0:   
+    if aggr_weight > 0:
       t_heat = _h_aggregate(t_heat, aggr_weight=aggr_weight)
       l_heat = _v_aggregate(l_heat, aggr_weight=aggr_weight)
       b_heat = _h_aggregate(b_heat, aggr_weight=aggr_weight)
       r_heat = _v_aggregate(r_heat, aggr_weight=aggr_weight)
-      
+
     # perform nms on heatmaps
     t_heat = _nms(t_heat)
     l_heat = _nms(l_heat)
     b_heat = _nms(b_heat)
     r_heat = _nms(r_heat)
-      
+
     t_heat[t_heat > 1] = 1
     l_heat[l_heat > 1] = 1
     b_heat[b_heat > 1] = 1
@@ -391,7 +392,7 @@ def exct_decode(
         b_ys = b_ys + 0.5
         r_xs = r_xs + 0.5
         r_ys = r_ys + 0.5
-      
+
     bboxes = torch.stack((l_xs, t_ys, r_xs, b_ys), dim=5)
     bboxes = bboxes.view(batch, -1, 4)
     bboxes = _gather_feat(bboxes, inds)
@@ -417,7 +418,7 @@ def exct_decode(
     r_ys = _gather_feat(r_ys, inds).float()
 
 
-    detections = torch.cat([bboxes, scores, t_xs, t_ys, l_xs, l_ys, 
+    detections = torch.cat([bboxes, scores, t_xs, t_ys, l_xs, l_ys,
                             b_xs, b_ys, r_xs, r_ys, clses], dim=2)
 
 
@@ -428,7 +429,7 @@ def ddd_decode(heat, rot, depth, dim, wh=None, reg=None, K=40):
     # heat = torch.sigmoid(heat)
     # perform nms on heatmaps
     heat = _nms(heat)
-      
+
     scores, inds, clses, ys, xs = _topk(heat, K=K)
     if reg is not None:
       reg = _tranpose_and_gather_feat(reg, inds)
@@ -438,7 +439,7 @@ def ddd_decode(heat, rot, depth, dim, wh=None, reg=None, K=40):
     else:
       xs = xs.view(batch, K, 1) + 0.5
       ys = ys.view(batch, K, 1) + 0.5
-      
+
     rot = _tranpose_and_gather_feat(rot, inds)
     rot = rot.view(batch, K, 8)
     depth = _tranpose_and_gather_feat(depth, inds)
@@ -449,7 +450,7 @@ def ddd_decode(heat, rot, depth, dim, wh=None, reg=None, K=40):
     scores = scores.view(batch, K, 1)
     xs = xs.view(batch, K, 1)
     ys = ys.view(batch, K, 1)
-      
+
     if wh is not None:
         wh = _tranpose_and_gather_feat(wh, inds)
         wh = wh.view(batch, K, 2)
@@ -458,7 +459,7 @@ def ddd_decode(heat, rot, depth, dim, wh=None, reg=None, K=40):
     else:
         detections = torch.cat(
             [xs, ys, scores, rot, depth, dim, clses], dim=2)
-      
+
     return detections
 
 def ctdet_decode(heat, wh, reg=None, cat_spec_wh=False, K=100):
@@ -467,7 +468,7 @@ def ctdet_decode(heat, wh, reg=None, cat_spec_wh=False, K=100):
     # heat = torch.sigmoid(heat)
     # perform nms on heatmaps
     heat = _nms(heat)
-      
+
     scores, inds, clses, ys, xs = _topk(heat, K=K)
     if reg is not None:
       reg = _tranpose_and_gather_feat(reg, inds)
@@ -486,12 +487,12 @@ def ctdet_decode(heat, wh, reg=None, cat_spec_wh=False, K=100):
       wh = wh.view(batch, K, 2)
     clses  = clses.view(batch, K, 1).float()
     scores = scores.view(batch, K, 1)
-    bboxes = torch.cat([xs - wh[..., 0:1] / 2, 
+    bboxes = torch.cat([xs - wh[..., 0:1] / 2,
                         ys - wh[..., 1:2] / 2,
-                        xs + wh[..., 0:1] / 2, 
+                        xs + wh[..., 0:1] / 2,
                         ys + wh[..., 1:2] / 2], dim=2)
     detections = torch.cat([bboxes, scores, clses], dim=2)
-      
+
     return detections
 
 def multi_pose_decode(
@@ -520,9 +521,9 @@ def multi_pose_decode(
   clses  = clses.view(batch, K, 1).float()
   scores = scores.view(batch, K, 1)
 
-  bboxes = torch.cat([xs - wh[..., 0:1] / 2, 
+  bboxes = torch.cat([xs - wh[..., 0:1] / 2,
                       ys - wh[..., 1:2] / 2,
-                      xs + wh[..., 0:1] / 2, 
+                      xs + wh[..., 0:1] / 2,
                       ys + wh[..., 1:2] / 2], dim=2)
   if hm_hp is not None:
       hm_hp = _nms(hm_hp)
@@ -540,7 +541,7 @@ def multi_pose_decode(
       else:
           hm_xs = hm_xs + 0.5
           hm_ys = hm_ys + 0.5
-        
+
       mask = (hm_score > thresh).float()
       hm_score = (1 - mask) * -1 + mask * hm_score
       hm_ys = (1 - mask) * (-10000) + mask * hm_ys
@@ -567,30 +568,113 @@ def multi_pose_decode(
       kps = kps.permute(0, 2, 1, 3).contiguous().view(
           batch, K, num_joints * 2)
   detections = torch.cat([bboxes, scores, kps, clses], dim=2)
-    
+
   return detections
 
 
-def pano_decode(heat_center, bbox_wh, reg_center, K=100):
+def pano_decode(heat_center, bbox_w, bbox_h, reg_center=None, K=100):
     batch_size, _, h, w = heat_center.size()
     heat_center = _nms(heat_center)
     scores_center, inds_center, clses_center, ys_center, xs_center = _topk(heat_center, K=K)
 
-    reg_center = _tranpose_and_gather_feat(reg_center, inds_center)
-    reg_center = reg_center.view(batch_size, K, 2)
-    xs_center = xs_center.view(batch_size, K, 1) + reg_center[:, :, 0:1]
-    ys_center = ys_center.view(batch_size, K, 1) + reg_center[:, :, 1:2]
+    xs_center = xs_center.view(batch_size, K, 1)
+    ys_center = ys_center.view(batch_size, K, 1)
+    if reg_center is not None:
+        reg_center = _tranpose_and_gather_feat(reg_center, inds_center)
+        reg_center = reg_center.view(batch_size, K, 2)
+        xs_center = xs_center + reg_center[:, :, 0:1]
+        ys_center = ys_center + reg_center[:, :, 1:2]
 
-    bbox_wh = _tranpose_and_gather_feat(bbox_wh, inds_center)
-    bbox_wh = bbox_wh.view(batch_size, K, 2)
+    bbox_w = _tranpose_and_gather_feat(bbox_w, inds_center)
+    bbox_w = bbox_w.view(batch_size, K, 2)
+    bbox_h = _tranpose_and_gather_feat(bbox_h, inds_center)
+    bbox_h = bbox_h.view(batch_size, K, 2)
 
     clses_center = clses_center.view(batch_size, K, 1).float()
     scores_center = scores_center.view(batch_size, K, 1)
 
-    bboxes = torch.cat([xs_center - bbox_wh[..., 0:1] * w / 2,
-                        ys_center - bbox_wh[..., 1:2] * h / 2,
-                        xs_center + bbox_wh[..., 0:1] * w / 2,
-                        ys_center + bbox_wh[..., 1:2] * h / 2], dim=2)
+    bboxes = torch.cat([xs_center - bbox_w[..., 0:1] * w,
+                        ys_center - bbox_h[..., 0:1] * h,
+                        xs_center + bbox_w[..., 1:2] * w,
+                        ys_center + bbox_h[..., 1:2] * h], dim=2)
 
-    detections = torch.cat([bboxes, scores_center, clses_center], dim=2)
+    detections = torch.cat([bboxes, scores_center, clses_center, xs_center, ys_center], dim=2)
+    return detections
+
+
+def pano_decode_crown(heat_crown, reg_crown, K=100):
+    batch_size, _, h, w = heat_crown.size()
+    heat_crown = _nms(heat_crown)
+    scores_crown, inds_crown, clses_crown, ys_crown, xs_crown = _topk(heat_crown, K=K)
+
+    xs_crown = xs_crown.view(batch_size, K, 1)
+    ys_crown = ys_crown.view(batch_size, K, 1)
+    reg_crown = _tranpose_and_gather_feat(reg_crown, inds_crown)
+    reg_crown = reg_crown.view(batch_size, K, 2)
+    xs_crown = xs_crown + reg_crown[:, :, 0:1]
+    ys_crown = ys_crown + reg_crown[:, :, 1:2]
+
+    clses_crown = clses_crown.view(batch_size, K, 1).float()
+    scores_crown = scores_crown.view(batch_size, K, 1)
+
+    detections = torch.cat([xs_crown, ys_crown, scores_crown, clses_crown], dim=2)
+    return detections
+
+
+def pano_decode_aligned(heat_center, tooth_wh, reg_center, reg_crown, K=100):
+    batch_size, cat, h, w = heat_center.size()
+    heat_center = _nms(heat_center)
+    scores_center, inds_center, clses_center, ys_center, xs_center = _topk(heat_center, K=K)
+
+    xs_center = xs_center.view(batch_size, K, 1)
+    ys_center = ys_center.view(batch_size, K, 1)
+    reg_center = _tranpose_and_gather_feat(reg_center, inds_center)
+    reg_center = reg_center.view(batch_size, K, 2)
+    reg_crown = _tranpose_and_gather_feat(reg_crown, inds_center)
+    reg_crown = reg_crown.view(batch_size, K, 2)
+
+    xs_center = xs_center + reg_center[:, :, 0:1]
+    ys_center = ys_center + reg_center[:, :, 1:2]
+
+    tooth_wh = _tranpose_and_gather_feat(tooth_wh, inds_center)
+    tooth_wh = tooth_wh.view(batch_size, K, 2)
+
+    #clses_center = clses_center.view(batch_size, K, 1).float()
+    #scores_center = scores_center.view(batch_size, K, 1)
+    #detections = torch.cat([xs_center, ys_center, reg_crown, tooth_wh, scores_center, clses_center], dim=2)
+
+    cls_scores = _tranpose_and_gather_feat(heat_center, inds_center)
+    cls_scores = cls_scores.view(batch_size, K, cat)
+    detections = torch.cat([xs_center, ys_center, reg_crown, tooth_wh, cls_scores], dim=2)
+
+    return detections
+
+
+def pano_decode_det_and_cls(heat_center, tooth_wh, reg_center, reg_crown, K=100):
+    heat_det = heat_center[:, 0:1, :, :]
+    heat_det = _nms(heat_det)
+    heat_cls = heat_center[:, 1:, :, :]
+    batch_size, cat, h, w = heat_cls.size()
+
+    scores_center, inds_center, clses_center, ys_center, xs_center = _topk(heat_det, K=K)
+
+    xs_center = xs_center.view(batch_size, K, 1)
+    ys_center = ys_center.view(batch_size, K, 1)
+    reg_center = _tranpose_and_gather_feat(reg_center, inds_center)
+    reg_center = reg_center.view(batch_size, K, 2)
+    reg_crown = _tranpose_and_gather_feat(reg_crown, inds_center)
+    reg_crown = reg_crown.view(batch_size, K, 2)
+
+    xs_center = xs_center + reg_center[:, :, 0:1]
+    ys_center = ys_center + reg_center[:, :, 1:2]
+
+    tooth_wh = _tranpose_and_gather_feat(tooth_wh, inds_center)
+    tooth_wh = tooth_wh.view(batch_size, K, 2)
+
+    scores_center = scores_center.view(batch_size, K, 1)
+
+    cls_scores = _tranpose_and_gather_feat(heat_cls, inds_center)
+    cls_scores = cls_scores.view(batch_size, K, cat)
+    detections = torch.cat([xs_center, ys_center, reg_crown, tooth_wh, scores_center, cls_scores], dim=2)
+
     return detections

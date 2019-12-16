@@ -15,7 +15,10 @@ class opts(object):
     self.parser.add_argument('--dataset', default='pano',
                              help='coco | kitti | coco_hp | pascal | pano')
     self.parser.add_argument('--exp_id', default='default')
-    self.parser.add_argument('--test', action='store_true')
+    self.parser.add_argument('--test', default='',
+                             help='path to model to be tested')
+    self.parser.add_argument('--val', default='',
+                             help='path to model to be validated')
     self.parser.add_argument('--debug', type=int, default=0,
                              help='level of visualization.'
                                   '1: only show the final detection results'
@@ -25,9 +28,10 @@ class opts(object):
     self.parser.add_argument('--demo', default='',
                              help='path to image/ image folders/ video. '
                                   'or "webcam"')
-    self.parser.add_argument('--load_model', default='',
-                             help='path to pretrained model')
-    self.parser.add_argument('--resume', action='store_true',
+    #self.parser.add_argument('--load_model', default='',
+    #                         help='path to pretrained model')
+    #self.parser.add_argument('--resume', action='store_true',
+    self.parser.add_argument('--resume', default='',
                              help='resume an experiment. '
                                   'Reloaded the optimizer parameter and '
                                   'set load_model to model_last.pth '
@@ -159,7 +163,7 @@ class opts(object):
                              help='loss weight for keypoint heatmaps.')
     self.parser.add_argument('--off_weight', type=float, default=1,
                              help='loss weight for keypoint local offsets.')
-    self.parser.add_argument('--wh_weight', type=float, default=0.1,
+    self.parser.add_argument('--wh_weight', type=float, default=1,
                              help='loss weight for bounding box size.')
     # multi_pose
     self.parser.add_argument('--hp_weight', type=float, default=1,
@@ -270,22 +274,22 @@ class opts(object):
 
     #opt.root_dir = os.path.join(os.path.dirname(__file__), '..', '..')
     opt.root_dir = 'D:\\osstem_pano_data'
-    opt.data_dir = os.path.join(opt.root_dir, 'rawdata', '20190923')
+    opt.data_dir = os.path.join(opt.root_dir, 'rawdata', 'all')
     opt.exp_dir = os.path.join(opt.root_dir, 'exp', opt.task)
     opt.save_dir = os.path.join(opt.exp_dir, opt.exp_id)
     opt.debug_dir = os.path.join(opt.save_dir, 'debug')
     print('The output will be saved to ', opt.save_dir)
 
-    if opt.resume or opt.test:
-      if opt.load_model == '':
-        model_path = opt.save_dir[:-4] if opt.save_dir.endswith('TEST') \
-                    else opt.save_dir
-        opt.load_model = os.path.join(model_path, 'model_last.pth')
-      else:
-        opt.load_model = os.path.join(opt.save_dir, 'model_{}.pth'.format(opt.load_model))
+    opt.load_model = ''
+    if opt.resume:
+      opt.load_model = os.path.join(opt.save_dir, 'model_{}.pth'.format(opt.resume))
+    elif opt.val:
+      opt.load_model = os.path.join(opt.save_dir, 'model_{}.pth'.format(opt.val))
+    elif opt.test:
+      opt.load_model = os.path.join(opt.save_dir, 'model_{}.pth'.format(opt.test))
 
-      if not os.path.exists(opt.load_model):
-        return None
+    if opt.load_model and (not os.path.exists(opt.load_model)):
+      return None
 
     return opt
 
@@ -341,8 +345,9 @@ class opts(object):
       # TODO: change to support multiple extreme points
       opt.heads = {
         'hm_center': opt.num_classes,
-        'bbox_wh': 2,
-        'reg_center': 2
+        'tooth_wh': 2,
+        'reg_center': 2,
+        'reg_crown': 2
       }
     else:
       assert 0, 'task not defined!'
